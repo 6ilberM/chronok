@@ -1,10 +1,9 @@
 use chrono::{Local, Timelike, Datelike};
-use crossterm::{
-    execute, queue,
-    style::{self, Stylize}, cursor, terminal, event::{self, Event, KeyCode},
-};
+use crossterm::{execute, queue, style::{self, Stylize}, cursor, terminal, event::{self, Event, KeyCode}};
 use std::io::{self, Write};
 use serde::Deserialize;
+use std::time::Duration;
+use std::thread;
 
 #[derive(Deserialize)]
 struct Config {
@@ -32,37 +31,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config: Config = toml::from_str(&config_toml)?;
 
     let mut stdout = io::stdout();
-    execute!(stdout, terminal::Clear(terminal::ClearType::All))?;
-    for y in 0..40 {
-        for x in 0..150 {
-            if (y == 0 || y == 40 - 1) || (x == 0 || x == 150 - 1) {
-                queue!(stdout, cursor::MoveTo(x, y), style::PrintStyledContent("█".magenta()))?;
-            }
-        }
-    }
 
-    let now = Local::now();
-    let weekday = now.weekday();
-    let total_minutes_day = 24 * 60;
-    let current_minutes_day = now.hour() * 60 + now.minute();
-    let percentage_day = (current_minutes_day as f32 / total_minutes_day as f32) * 100.0;
+    // Enable non-blocking reads
+    execute!(stdout, event::EnableMouseCapture)?;
 
-    let day_progress_bar = ProgressBar::new(config.progress_char, percentage_day);
-    let text = format!("\n\nTIME: {:02}:{:02}:{:02}\n\nDATE: {:02}/{:02}/{:02}\n\nWeek Process: [{:?}][{:02.0}%][{}]\n\n",
-                       now.hour(), now.minute(), now.second(),
-                       now.day(), now.month(), now.year() % 100,
-                       weekday, percentage_day, day_progress_bar.render());
+    // Get initial terminal size
+    let (terminal_width, terminal_height) = terminal::size()?;
+    let text_x = terminal_width / 2;
+    let text_y = terminal_height / 2;
 
-    queue!(stdout, cursor::MoveTo(2, 2), style::PrintStyledContent(text.as_str().blue().on_white()))?;
-    stdout.flush()?;
-
-    // Listen for events
     loop {
-        if let Ok(Event::Key(event)) = event::read() {
-            if event.code == KeyCode::Char('q') {
-                break;
+        let now = Local::now();
+        let weekday = now.weekday();
+        let total_minutes_day = 24 * 60;
+        let current_minutes_day = now.hour() * 60 + now.minute();
+        let percentage_day = (current_minutes_day as f32 / total_minutes_day as f32) * 100.0;
+
+        let day_progress_bar = ProgressBar::new(config.progress_char.clone(), percentage_day);
+        let week_number = now.iso_week().week();
+        let time_text = format!("TIME: {:02}:{:02}:{:02}", now.hour(), now.minute(), now.second());
+        let date_text = format!("DATE: {:02}/{:02}/{:02}", now.day(), now.month(), now.year() % 100);
+        let week_process_text = format!(
+            "Week Process: [{}][W:{:02}][{:02.0}%][{}]",
+            weekday,
+            week_number,
+            percentage_day,
+            day_progress_bar.render()
+        );
+
+        // Update only the lines that change
+        queue!(stdout, cursor::MoveTo(text_x, text_y))?;
+        queue!(stdout, style::PrintStyledContent(time_text.as_str().white().on_black()))?;
+
+        queue!(stdout, cursor::MoveTo(text_x, text_y + 2))?;
+        queue!(stdout, style::PrintStyledContent(date_text.as_str().white().on_black()))?;
+
+        queue!(stdout, cursor::MoveTo(text_x, text_y + 4))?;
+        queue!(stdout, style::PrintStyledContent(week_process_text.as_str().white().on_black()))?;
+
+        stdout.flush()?;
+
+        if event::poll(Duration::from_secs(0))? {
+            if let Ok(Event::Key(event)) = event::read() {
+                if event.code == KeyCode::Char('q') {
+                    // Disable non-blocking reads
+                    execute!(stdout, event::DisableMouseCapture)?;
+                    break;
+                }
             }
         }
+
+        thread::sleep(Duration::from_millis(100));
     }
 
     Ok(())
