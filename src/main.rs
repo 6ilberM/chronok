@@ -1,6 +1,6 @@
 use chrono::{Local, Timelike, Datelike, TimeZone, DateTime};
 use crossterm::{execute, terminal, event::{self, Event, KeyCode}};
-use std::io::{self};
+use std::io::{self, stdout, Write};
 use serde::Deserialize;
 use std::time::Duration;
 use colored::Colorize;
@@ -30,6 +30,12 @@ impl ProgressBar {
 fn queue_text(buffer: &mut String, x: u16, y: u16, text: &str, color: colored::Color) {
     buffer.push_str(&format!("\x1B[{};{}H", y + 1, x + 1)); // Move cursor to position
     buffer.push_str(&format!("{}", text.color(color))); // Add colored text
+}
+
+// Move the cursor up `n` lines
+fn move_cursor_up(n: u16) {
+    print!("\x1B[{}A", n);
+    stdout().flush().unwrap();
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
