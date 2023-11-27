@@ -1,1 +1,2 @@
 progress_char = "0"
+refresh_rate_in_millis = 500
