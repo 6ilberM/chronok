@@ -1,2 +1,2 @@
-refresh_rate_in_millis = 250
+refresh_rate_in_millis = 100
 timer_config_path = "timers.toml"
