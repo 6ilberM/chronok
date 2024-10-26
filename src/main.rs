@@ -14,19 +14,17 @@ struct Config {
 }
 
 struct ProgressBar {
-    progress_char: String,
     length: usize,
 }
 
 impl ProgressBar {
-    fn new(progress_char: &str, percentage: f32) -> Self {
+    fn new(percentage: f32) -> Self {
         let length = (percentage / 2.0).round() as usize; // Assuming a 50-character bar
-        ProgressBar { progress_char: progress_char.to_string(), length }
+        ProgressBar { length }
     }
 
     fn render(&self) -> String {
-        format!("{}{}", self.get_repeat_path_for_length(), self.get_repeat_path_for_end()
-        )
+        format!("{}{}", self.get_repeat_path_for_length(), self.get_repeat_path_for_end())
     }
 
     fn get_repeat_path_for_end(&self) -> String {
@@ -69,9 +67,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    let mut previous_time = String::new();
+    let mut previous_date = String::new();
+    let mut previous_day_progress = String::new();
+    let mut previous_week_progress = String::new();
+    let mut previous_year_progress = String::new();
+
     loop {
-        // Clear the screen at the start of each loop iteration
-        execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
+        let mut buffer = String::new(); // Use a buffer to accumulate output
+
+        // Move cursor to the top-left corner without clearing the screen
+        buffer.push_str(&format!("{}", cursor::MoveTo(0, 0)));
 
         // Get current time and calculate progress percentages
         let now = Local::now();
@@ -81,7 +87,7 @@ fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::
         let total_minutes_day = 24 * 60;
         let current_minutes_day = now.hour() * 60 + now.minute();
         let percentage_day = (current_minutes_day as f32 / total_minutes_day as f32) * 100.0;
-        let day_progress_bar = ProgressBar::new(&config.progress_char, percentage_day);
+        let day_progress_bar = ProgressBar::new(percentage_day);
         let day_process_text = format!(
             "Day Progress: [{}][{:02.0}%][{}]",
             weekday,
@@ -94,7 +100,7 @@ fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::
         let current_day_of_week = now.weekday().num_days_from_sunday();
         let current_minutes_week = current_day_of_week * total_minutes_day + current_minutes_day;
         let percentage_week = (current_minutes_week as f32 / total_minutes_week as f32) * 100.0;
-        let week_progress_bar = ProgressBar::new(&config.progress_char, percentage_week);
+        let week_progress_bar = ProgressBar::new(percentage_week);
         let current_week = now.iso_week().week();
         let week_process_text = format!(
             "Week Progress: [W:{:02}][{:02.0}%][{}]",
@@ -109,7 +115,7 @@ fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::
         let total_minutes_year = 365 * total_minutes_day; // You might adjust for leap years
         let current_minutes_year = duration_since_start_of_year.num_minutes();
         let percentage_year = (current_minutes_year as f32 / total_minutes_year as f32) * 100.0;
-        let year_progress_bar = ProgressBar::new(&config.progress_char, percentage_year);
+        let year_progress_bar = ProgressBar::new(percentage_year);
         let year_process_text = format!(
             "Year Progress: [Y:{:04}][{:02.0}%][{}]",
             now.year(),
@@ -121,15 +127,29 @@ fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::
         let time_text = format!("TIME: {:02}:{:02}:{:02}", now.hour(), now.minute(), now.second());
         let date_text = format!("DATE: {:02}/{:02}/{:04}", now.day(), now.month(), now.year());
 
-        // Write output to the terminal
-        println!("{}", time_text.red().bold());
-        println!("{}", date_text.blue().bold());
-        println!("{}", day_process_text.green().bold());
-        println!("{}", week_process_text.yellow().bold());
-        println!("{}", year_process_text.magenta().bold());
+        // Check if any of the displayed values have changed
+        if time_text != previous_time || date_text != previous_date ||
+            day_process_text != previous_day_progress || week_process_text != previous_week_progress ||
+            year_process_text != previous_year_progress {
 
-        // Flush stdout to ensure the output is displayed
-        stdout.flush()?;
+            // Accumulate output in the buffer
+            buffer.push_str(&format!("{}\n", time_text.red().bold()));
+            buffer.push_str(&format!("{}\n", date_text.blue().bold()));
+            buffer.push_str(&format!("{}\n", day_process_text.green().bold()));
+            buffer.push_str(&format!("{}\n", week_process_text.yellow().bold()));
+            buffer.push_str(&format!("{}\n", year_process_text.magenta().bold()));
+
+            // Write the buffer to the terminal
+            write!(stdout, "{}", buffer)?;
+            stdout.flush()?;
+
+            // Update previous state
+            previous_time = time_text;
+            previous_date = date_text;
+            previous_day_progress = day_process_text;
+            previous_week_progress = week_process_text;
+            previous_year_progress = year_process_text;
+        }
 
         // Check for 'q' or 'Ctrl + C' key press to exit
         if event::poll(Duration::from_millis(0))? {
@@ -151,7 +171,6 @@ fn should_exit(key_event: &event::KeyEvent) -> bool {
     key_event.code == KeyCode::Char('q') ||
         (key_event.code == KeyCode::Char('c') && key_event.modifiers.contains(event::KeyModifiers::CONTROL))
 }
-
 
 fn get_start_of_year(now: DateTime<Local>) -> DateTime<Local> {
     Local.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0).unwrap()
