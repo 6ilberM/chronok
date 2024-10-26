@@ -46,28 +46,17 @@ fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::
         show_remaining: false,
     };
 
-    let mut last_minute = Local::now().minute();
-
-    // Render the initial state
-    render_view(stdout, &app_state)?;
-
     loop {
-        let now = Local::now();
-        let current_minute = now.minute();
+        // Render the current view
+        render_view(stdout, &app_state)?;
 
-        // Check for input and update the display if necessary
-        let input_action_occurred = handle_input(&mut app_state)?;
-
-        // Update the display if the minute has changed or an input action occurred
-        if current_minute != last_minute || input_action_occurred {
-            render_view(stdout, &app_state)?;
-            last_minute = current_minute;
+        // Handle input and update the current view
+        if handle_input(&mut app_state)? {
+            break; // Exit the loop if quit command is detected
         }
 
-        // Sleep for a short duration to reduce CPU usage
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(config.refresh_rate_in_millis));
     }
+
+    Ok(())
 }
-
-
-
