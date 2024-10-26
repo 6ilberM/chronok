@@ -4,7 +4,6 @@ mod view;
 mod timer;
 
 use crate::view::AppState;
-use chrono::Timelike;
 use config::Config;
 use crossterm::{cursor, execute, terminal};
 use input::handle_input;
@@ -17,18 +16,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::load_config("config.toml")?;
 
     let mut stdout = io::stdout();
+    let mut last_buffer = String::new(); // Initialize the last buffer
 
     // Enable raw mode and enter alternate screen
     terminal::enable_raw_mode()?;
     execute!(
         stdout,
         terminal::EnterAlternateScreen,
-        cursor::Hide,
-        terminal::Clear(terminal::ClearType::All)
+        cursor::Hide
     )?;
 
     // Run the application
-    let result = run_app(&mut stdout, &config);
+    let result = run_app(&mut stdout, &config, &mut last_buffer);
 
     // Restore terminal settings
     execute!(
@@ -41,15 +40,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     result
 }
 
-fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+fn run_app(stdout: &mut impl Write, config: &Config, last_buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
     let mut app_state = AppState {
         current_view: View::Main,
         show_remaining: false,
     };
 
     loop {
-        // Render the current view
-        render_view(stdout, &app_state)?;
+        // Render the current view with double buffering
+        render_view(stdout, &app_state, last_buffer)?;
 
         // Handle input and update the current view
         if handle_input(&mut app_state)? {

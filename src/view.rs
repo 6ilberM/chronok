@@ -11,40 +11,34 @@ pub enum View {
 
 pub struct AppState {
     pub current_view: View,
-    pub show_remaining: bool, // Toggle state for showing remaining time
+    pub show_remaining: bool,
 }
 
-
-pub fn render_view(stdout: &mut impl Write, app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
-    stdout.execute(terminal::Clear(terminal::ClearType::All))?;
-    stdout.execute(cursor::MoveTo(0, 0))?;
-
+pub fn render_view(stdout: &mut impl Write, app_state: &AppState, last_buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer = String::new();
 
     match app_state.current_view {
         View::Main => render_main_view(&mut buffer, app_state.show_remaining),
-        View::TimeLimit => render_time_limit_view(&mut buffer)?,  // Note the added ? operator
+        View::TimeLimit => render_time_limit_view(&mut buffer)?,
     }
 
-    write!(stdout, "{}", buffer)?;
-    stdout.flush()?;
+    // Only update the screen if the buffer has changed
+    if buffer != *last_buffer {
+        stdout.execute(terminal::Clear(terminal::ClearType::All))?;
+        stdout.execute(cursor::MoveTo(0, 0))?;
+        write!(stdout, "{}", buffer)?;
+        stdout.flush()?;
+        *last_buffer = buffer;
+    }
+
     Ok(())
 }
 
-
 fn render_main_view(buffer: &mut String, show_remaining: bool) {
     let now = Local::now();
-
-    // Render time and date
     render_time_and_date(buffer, &now);
-
-    // Render day progress
     render_day_progress(buffer, &now, show_remaining);
-
-    // Render week progress
     render_week_progress(buffer, &now, show_remaining);
-
-    // Render year progress
     render_year_progress(buffer, &now, show_remaining);
 }
 
@@ -136,6 +130,56 @@ fn render_year_progress(buffer: &mut String, now: &chrono::DateTime<Local>, show
     buffer.push_str(&format!("{}\n", year_process_text.magenta().bold()));
 }
 
+pub fn render_time_limit_view(buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
+    let now = Local::now();
+    let config = crate::config::load_config("config.toml")?;
+    let timer_config = load_timer_config(&config.timer_config_path)?;
+
+    let (active, completed): (Vec<_>, Vec<_>) = timer_config.timers
+        .iter()
+        .partition(|timer| timer.is_active(&now));
+
+    buffer.push_str(&format!("{}\n", "Time Limits".blue().bold()));
+    buffer.push_str(&format!("{}\n", "═".repeat(50).blue()));
+
+    if active.is_empty() && completed.is_empty() {
+        buffer.push_str(&format!("\n{}\n", "No timers configured.".yellow()));
+        buffer.push_str("Add timers to timers.toml to get started.\n");
+        return Ok(());
+    }
+
+    buffer.push_str(&format!("{}\n", "Active Timers:".green().bold()));
+    for timer in &active {
+        let progress = timer.progress(&now);
+        let progress_bar = ProgressBar::new(progress);
+
+        let timer_text = format!(
+            "{}: {} - {}% [{}]",
+            timer.name,
+            timer.time,
+            progress as u32,
+            progress_bar.render()
+        );
+        buffer.push_str(&format!("{}\n", timer_text.yellow()));
+        buffer.push_str(&format!("Message: {}\n", timer.message.white()));
+    }
+
+    if !completed.is_empty() {
+        buffer.push_str(&format!("\n{}\n", "Completed Timers:".red().bold()));
+        for timer in &completed {
+            let timer_text = format!(
+                "{}: {} - {}",
+                timer.name,
+                timer.time,
+                timer.message
+            );
+            buffer.push_str(&format!("{}\n", timer_text.dimmed()));
+        }
+    }
+
+    Ok(())
+}
+
 struct ProgressBar {
     length: usize,
 }
@@ -152,60 +196,3 @@ impl ProgressBar {
         format!("{}{}", filled, empty)
     }
 }
-
-fn render_time_limit_view(buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
-    let now = Local::now();
-    let config = crate::config::load_config("config.toml")?;
-    let timer_config = load_timer_config(&config.timer_config_path)?;
-
-    // Sort timers into active and completed
-    let (active, completed): (Vec<_>, Vec<_>) = timer_config.timers
-        .iter()
-        .partition(|timer| timer.is_active(&now));
-
-    // Render header
-    buffer.push_str(&format!("{}\n", "Time Limits".blue().bold()));
-    buffer.push_str(&format!("{}\n", "═".repeat(50).blue()));
-
-    // Check if there are any timers
-    if active.is_empty() && completed.is_empty() {
-        buffer.push_str(&format!("\n{}\n", "No timers configured.".yellow()));
-        buffer.push_str("Add timers to timers.toml to get started.\n");
-        return Ok(());
-    }
-
-    // Render active timers
-    buffer.push_str(&format!("{}\n", "Active Timers:".green().bold()));
-    for timer in &active {  // Note the & here
-        let progress = timer.progress(&now);
-        let progress_bar = ProgressBar::new(progress);
-
-        let timer_text = format!(
-            "{}: {} - {}% [{}]",
-            timer.name,
-            timer.time,
-            progress as u32,
-            progress_bar.render()
-        );
-        buffer.push_str(&format!("{}\n", timer_text.yellow()));
-        buffer.push_str(&format!("Message: {}\n", timer.message.white()));
-    }
-
-    // Render completed timers
-    if !completed.is_empty() {
-        buffer.push_str(&format!("\n{}\n", "Completed Timers:".red().bold()));
-        for timer in &completed {  // Note the & here
-            let timer_text = format!(
-                "{}: {} - {}",
-                timer.name,
-                timer.time,
-                timer.message
-            );
-            buffer.push_str(&format!("{}\n", timer_text.dimmed()));
-        }
-    }
-
-    Ok(())
-}
-
-
