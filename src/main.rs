@@ -5,9 +5,11 @@ mod view;
 use crossterm::{execute, terminal, cursor};
 use std::io::{self, Write};
 use std::time::Duration;
+use chrono::{Local, Timelike};
 use config::Config;
 use view::{View, render_view};
 use input::handle_input;
+use crate::view::AppState;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
@@ -39,20 +41,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let mut current_view = View::Main;
+    let mut app_state = AppState {
+        current_view: View::Main,
+        show_remaining: false,
+    };
+
+    let mut last_minute = Local::now().minute();
+
+    // Render the initial state
+    render_view(stdout, &app_state)?;
 
     loop {
-        // Render the current view
-        render_view(stdout, &current_view)?;
+        let now = Local::now();
+        let current_minute = now.minute();
 
-        // Handle input and update the current view
-        if handle_input(&mut current_view)? {
-            break;
+        // Check for input and update the display if necessary
+        let input_action_occurred = handle_input(&mut app_state)?;
+
+        // Update the display if the minute has changed or an input action occurred
+        if current_minute != last_minute || input_action_occurred {
+            render_view(stdout, &app_state)?;
+            last_minute = current_minute;
         }
 
-        // Sleep for the configured refresh rate
-        std::thread::sleep(Duration::from_millis(config.refresh_rate_in_millis));
+        // Sleep for a short duration to reduce CPU usage
+        std::thread::sleep(Duration::from_millis(100));
     }
-
-    Ok(())
 }
+
+
+
