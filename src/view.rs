@@ -1,6 +1,6 @@
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use colored::Colorize;
-use crossterm::cursor;
+use crossterm::{cursor, execute, terminal, ExecutableCommand};
 use std::io::Write;
 
 pub enum View {
@@ -13,9 +13,13 @@ pub struct AppState {
     pub show_remaining: bool, // Toggle state for showing remaining time
 }
 
+
 pub fn render_view(stdout: &mut impl Write, app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+    // Clear the screen before rendering
+    stdout.execute(terminal::Clear(terminal::ClearType::All))?;
+    stdout.execute(cursor::MoveTo(0, 0))?;
+
     let mut buffer = String::new();
-    buffer.push_str(&format!("{}", cursor::MoveTo(0, 0)));
 
     match app_state.current_view {
         View::Main => render_main_view(&mut buffer, app_state.show_remaining),
