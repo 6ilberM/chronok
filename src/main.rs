@@ -4,18 +4,18 @@ mod view;
 mod timer;
 mod time_blocks;
 
-use crate::view::AppState;
 use config::Config;
 use crossterm::{cursor, execute, terminal};
 use input::handle_input;
 use std::io::{self, Write};
 use std::time::Duration;
 use view::{render_view, View};
+use crate::time_blocks::TimeBlock;
+use crate::view::AppState;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
     let config = config::load_config("config.toml")?;
-    // Store time_blocks in app_state instead of as an unused variable
     let time_blocks = time_blocks::load_time_blocks("time_blocks.toml")?;
 
     let mut stdout = io::stdout();
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Run the application with time_blocks
-    let result = run_app(&mut stdout, &config, &mut last_buffer);
+    let result = run_app(&mut stdout, &config, &mut last_buffer, time_blocks);
 
     // Restore terminal settings
     execute!(
@@ -43,19 +43,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     result
 }
 
-fn run_app(stdout: &mut impl Write, config: &Config, last_buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
+fn run_app(
+    stdout: &mut impl Write,
+    config: &Config,
+    last_buffer: &mut String,
+    time_blocks: Vec<TimeBlock>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut app_state = AppState {
         current_view: View::Main,
         show_remaining: false,
+        time_blocks,  // Initialize with the loaded time blocks
     };
 
     loop {
-        // Render the current view with double buffering
         render_view(stdout, &app_state, last_buffer)?;
 
-        // Handle input and update the current view
         if handle_input(&mut app_state)? {
-            break; // Exit the loop if quit command is detected
+            break;
         }
 
         std::thread::sleep(Duration::from_millis(config.refresh_rate_in_millis));

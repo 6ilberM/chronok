@@ -16,6 +16,7 @@ pub enum View {
 pub struct AppState {
     pub current_view: View,
     pub show_remaining: bool,
+    pub time_blocks: Vec<TimeBlock>,
 }
 
 pub fn render_view(stdout: &mut impl Write, app_state: &AppState, last_buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
