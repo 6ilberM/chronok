@@ -1,15 +1,16 @@
 mod input;
 mod config;
 mod view;
+mod timer;
 
-use crossterm::{execute, terminal, cursor};
+use crate::view::AppState;
+use chrono::Timelike;
+use config::Config;
+use crossterm::{cursor, execute, terminal};
+use input::handle_input;
 use std::io::{self, Write};
 use std::time::Duration;
-use chrono::{Local, Timelike};
-use config::Config;
-use view::{View, render_view};
-use input::handle_input;
-use crate::view::AppState;
+use view::{render_view, View};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration

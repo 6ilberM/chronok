@@ -1,6 +1,7 @@
+use crate::timer::load_timer_config;
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use colored::Colorize;
-use crossterm::{cursor, execute, terminal, ExecutableCommand};
+use crossterm::{cursor, terminal, ExecutableCommand};
 use std::io::Write;
 
 pub enum View {
@@ -15,7 +16,6 @@ pub struct AppState {
 
 
 pub fn render_view(stdout: &mut impl Write, app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
-    // Clear the screen before rendering
     stdout.execute(terminal::Clear(terminal::ClearType::All))?;
     stdout.execute(cursor::MoveTo(0, 0))?;
 
@@ -23,14 +23,14 @@ pub fn render_view(stdout: &mut impl Write, app_state: &AppState) -> Result<(), 
 
     match app_state.current_view {
         View::Main => render_main_view(&mut buffer, app_state.show_remaining),
-        View::TimeLimit => render_time_limit_view(&mut buffer),
+        View::TimeLimit => render_time_limit_view(&mut buffer)?,  // Note the added ? operator
     }
 
-    // Flush once after all updates
     write!(stdout, "{}", buffer)?;
     stdout.flush()?;
     Ok(())
 }
+
 
 fn render_main_view(buffer: &mut String, show_remaining: bool) {
     let now = Local::now();
@@ -153,7 +153,59 @@ impl ProgressBar {
     }
 }
 
-fn render_time_limit_view(buffer: &mut String) {
-    buffer.push_str("Time Limit View\n");
-    buffer.push_str("Here you can manage your time limits.\n");
+fn render_time_limit_view(buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
+    let now = Local::now();
+    let config = crate::config::load_config("config.toml")?;
+    let timer_config = load_timer_config(&config.timer_config_path)?;
+
+    // Sort timers into active and completed
+    let (active, completed): (Vec<_>, Vec<_>) = timer_config.timers
+        .iter()
+        .partition(|timer| timer.is_active(&now));
+
+    // Render header
+    buffer.push_str(&format!("{}\n", "Time Limits".blue().bold()));
+    buffer.push_str(&format!("{}\n", "═".repeat(50).blue()));
+
+    // Check if there are any timers
+    if active.is_empty() && completed.is_empty() {
+        buffer.push_str(&format!("\n{}\n", "No timers configured.".yellow()));
+        buffer.push_str("Add timers to timers.toml to get started.\n");
+        return Ok(());
+    }
+
+    // Render active timers
+    buffer.push_str(&format!("{}\n", "Active Timers:".green().bold()));
+    for timer in &active {  // Note the & here
+        let progress = timer.progress(&now);
+        let progress_bar = ProgressBar::new(progress);
+
+        let timer_text = format!(
+            "{}: {} - {}% [{}]",
+            timer.name,
+            timer.time,
+            progress as u32,
+            progress_bar.render()
+        );
+        buffer.push_str(&format!("{}\n", timer_text.yellow()));
+        buffer.push_str(&format!("Message: {}\n", timer.message.white()));
+    }
+
+    // Render completed timers
+    if !completed.is_empty() {
+        buffer.push_str(&format!("\n{}\n", "Completed Timers:".red().bold()));
+        for timer in &completed {  // Note the & here
+            let timer_text = format!(
+                "{}: {} - {}",
+                timer.name,
+                timer.time,
+                timer.message
+            );
+            buffer.push_str(&format!("{}\n", timer_text.dimmed()));
+        }
+    }
+
+    Ok(())
 }
+
+

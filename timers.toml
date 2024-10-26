@@ -1,0 +1,5 @@
+timers = [
+    { name = "Lunch Break", time = "12:00", message = "Time for lunch!", repeat = "daily" },
+    { name = "End of Work", time = "17:00", message = "Time to wrap up!", repeat = "daily" },
+    { name = "Go to bed", time = "21:45", message = "Time to wrap up!", repeat = "daily" },
+]
