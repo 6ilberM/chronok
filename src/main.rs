@@ -2,6 +2,7 @@ mod input;
 mod config;
 mod view;
 mod timer;
+mod time_blocks;
 
 use crate::view::AppState;
 use config::Config;
@@ -14,9 +15,11 @@ use view::{render_view, View};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
     let config = config::load_config("config.toml")?;
+    // Store time_blocks in app_state instead of as an unused variable
+    let time_blocks = time_blocks::load_time_blocks("time_blocks.toml")?;
 
     let mut stdout = io::stdout();
-    let mut last_buffer = String::new(); // Initialize the last buffer
+    let mut last_buffer = String::new();
 
     // Enable raw mode and enter alternate screen
     terminal::enable_raw_mode()?;
@@ -26,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cursor::Hide
     )?;
 
-    // Run the application
+    // Run the application with time_blocks
     let result = run_app(&mut stdout, &config, &mut last_buffer);
 
     // Restore terminal settings

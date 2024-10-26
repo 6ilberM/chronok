@@ -1,12 +1,16 @@
-use crate::timer::load_timer_config;
-use chrono::{Datelike, Local, TimeZone, Timelike};
-use colored::Colorize;
-use crossterm::{cursor, terminal, ExecutableCommand};
 use std::io::Write;
 
+use chrono::{Datelike, Local, TimeZone, Timelike, DateTime};
+use colored::Colorize;
+use crossterm::{cursor, terminal, ExecutableCommand};
+
+use crate::timer::load_timer_config;
+use crate::time_blocks::TimeBlock;
 pub enum View {
     Main,
     TimeLimit,
+    TimeBlocks,
+
 }
 
 pub struct AppState {
@@ -18,11 +22,14 @@ pub fn render_view(stdout: &mut impl Write, app_state: &AppState, last_buffer: &
     let mut buffer = String::new();
 
     match app_state.current_view {
-        View::Main => render_main_view(&mut buffer, app_state.show_remaining),
+        View::Main => {
+            render_main_view(&mut buffer, app_state.show_remaining);
+            render_time_blocks_view(&mut buffer);
+        }
         View::TimeLimit => render_time_limit_view(&mut buffer)?,
+        View::TimeBlocks => render_time_blocks_view(&mut buffer)?,  // New view rendering
     }
 
-    // Only update the screen if the buffer has changed
     if buffer != *last_buffer {
         stdout.execute(terminal::Clear(terminal::ClearType::All))?;
         stdout.execute(cursor::MoveTo(0, 0))?;
@@ -36,18 +43,54 @@ pub fn render_view(stdout: &mut impl Write, app_state: &AppState, last_buffer: &
 
 fn render_main_view(buffer: &mut String, show_remaining: bool) {
     let now = Local::now();
+
     render_time_and_date(buffer, &now);
+
     render_day_progress(buffer, &now, show_remaining);
     render_week_progress(buffer, &now, show_remaining);
     render_year_progress(buffer, &now, show_remaining);
 }
-
 fn render_time_and_date(buffer: &mut String, now: &chrono::DateTime<Local>) {
     let time_text = format!("TIME: {:02}:{:02}", now.hour(), now.minute());
     let date_text = format!("DATE: {:02}/{:02}/{:04}", now.day(), now.month(), now.year());
 
     buffer.push_str(&format!("{}\n", time_text.red().bold()));
     buffer.push_str(&format!("{}\n", date_text.blue().bold()));
+}
+
+fn render_time_blocks_view(buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
+    let now = Local::now();
+    buffer.push_str(&format!("{}\n", "Time Blocks".blue().bold()));
+    buffer.push_str(&format!("{}\n", "═".repeat(50).blue()));
+
+    let time_blocks = crate::time_blocks::load_time_blocks("time_blocks.toml")?;
+
+    for block in time_blocks {
+        let (percentage, time_left_text) = calculate_time_block_progress(&now, &block);
+        let progress_bar = ProgressBar::new(percentage);
+        let block_text = format!(
+            "{}: [{:02.0}%][{}][{}]",
+            block.name,
+            percentage,
+            time_left_text,
+            progress_bar.render()
+        );
+        buffer.push_str(&format!("{}\n", block_text));
+    }
+
+    Ok(())
+}
+
+pub fn calculate_time_block_progress(now: &DateTime<Local>, block: &TimeBlock) -> (f32, String) {
+    let current_time = now.time();
+    let total_minutes = (block.end_time - block.start_time).num_minutes();
+    let elapsed_minutes = (current_time - block.start_time).num_minutes();
+    let remaining_minutes = total_minutes - elapsed_minutes;
+
+    let percentage = (elapsed_minutes as f32 / total_minutes as f32) * 100.0;
+    let time_left_text = format!("{}h {}m left", remaining_minutes / 60, remaining_minutes % 60);
+
+    (percentage, time_left_text)
 }
 
 fn render_day_progress(buffer: &mut String, now: &chrono::DateTime<Local>, show_remaining: bool) {
@@ -182,16 +225,24 @@ pub fn render_time_limit_view(buffer: &mut String) -> Result<(), Box<dyn std::er
 
 struct ProgressBar {
     length: usize,
+    overflow: bool,
 }
 
 impl ProgressBar {
     fn new(percentage: f32) -> Self {
-        let length = (percentage / 2.0).round() as usize;
-        ProgressBar { length }
+        let overflow = percentage > 100.0;
+        // Clamp at 100% if overflowing
+        let clamped_percentage = if overflow { 100.0 } else { percentage };
+        let length = ((clamped_percentage / 2.0).round() as usize).min(50);
+        ProgressBar { length, overflow }
     }
 
     fn render(&self) -> String {
-        let filled = "█".repeat(self.length);
+        let filled = if self.overflow {
+            "█".repeat(self.length).red()
+        } else {
+            "█".repeat(self.length).normal()
+        };
         let empty = "░".repeat(50 - self.length);
         format!("{}{}", filled, empty)
     }
