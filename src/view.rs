@@ -25,10 +25,10 @@ pub fn render_view(stdout: &mut impl Write, app_state: &AppState, last_buffer: &
     match app_state.current_view {
         View::Main => {
             render_main_view(&mut buffer, app_state.show_remaining);
-            render_time_blocks_view(&mut buffer);
+            render_time_blocks_view(&mut buffer, &app_state.time_blocks)?;
         }
         View::TimeLimit => render_time_limit_view(&mut buffer)?,
-        View::TimeBlocks => render_time_blocks_view(&mut buffer)?,  // New view rendering
+        View::TimeBlocks => render_time_blocks_view(&mut buffer, &app_state.time_blocks)?,
     }
 
     if buffer != *last_buffer {
@@ -59,15 +59,13 @@ fn render_time_and_date(buffer: &mut String, now: &chrono::DateTime<Local>) {
     buffer.push_str(&format!("{}\n", date_text.blue().bold()));
 }
 
-fn render_time_blocks_view(buffer: &mut String) -> Result<(), Box<dyn std::error::Error>> {
+fn render_time_blocks_view(buffer: &mut String, time_blocks: &[TimeBlock]) -> Result<(), Box<dyn std::error::Error>> {
     let now = Local::now();
     buffer.push_str(&format!("{}\n", "Time Blocks".blue().bold()));
     buffer.push_str(&format!("{}\n", "═".repeat(50).blue()));
 
-    let time_blocks = crate::time_blocks::load_time_blocks("time_blocks.toml")?;
-
     for block in time_blocks {
-        let (percentage, time_left_text) = calculate_time_block_progress(&now, &block);
+        let (percentage, time_left_text) = calculate_time_block_progress(&now, block);
         let progress_bar = ProgressBar::new(percentage);
         let block_text = format!(
             "{}: [{:02.0}%][{}][{}]",
