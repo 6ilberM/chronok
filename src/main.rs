@@ -25,11 +25,16 @@ impl ProgressBar {
     }
 
     fn render(&self) -> String {
-        format!(
-            "{}{}",
-            self.progress_char.repeat(self.length),
-            " ".repeat(50 - self.length)
+        format!("{}{}", self.get_repeat_path_for_length(), self.get_repeat_path_for_end()
         )
+    }
+
+    fn get_repeat_path_for_end(&self) -> String {
+        "░".repeat(50 - self.length)
+    }
+
+    fn get_repeat_path_for_length(&self) -> String {
+        "█".repeat(self.length)
     }
 }
 
@@ -117,19 +122,19 @@ fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::
         let date_text = format!("DATE: {:02}/{:02}/{:04}", now.day(), now.month(), now.year());
 
         // Write output to the terminal
-        println!("{}", time_text.red());
-        println!("{}", date_text.blue());
-        println!("{}", day_process_text.green());
-        println!("{}", week_process_text.yellow());
-        println!("{}", year_process_text.magenta());
+        println!("{}", time_text.red().bold());
+        println!("{}", date_text.blue().bold());
+        println!("{}", day_process_text.green().bold());
+        println!("{}", week_process_text.yellow().bold());
+        println!("{}", year_process_text.magenta().bold());
 
         // Flush stdout to ensure the output is displayed
         stdout.flush()?;
 
-        // Check for 'q' key press to exit
+        // Check for 'q' or 'Ctrl + C' key press to exit
         if event::poll(Duration::from_millis(0))? {
             if let Event::Key(key_event) = event::read()? {
-                if key_event.code == KeyCode::Char('q') {
+                if should_exit(&key_event) {
                     break;
                 }
             }
@@ -141,6 +146,12 @@ fn run_app(stdout: &mut impl Write, config: &Config) -> Result<(), Box<dyn std::
 
     Ok(())
 }
+
+fn should_exit(key_event: &event::KeyEvent) -> bool {
+    key_event.code == KeyCode::Char('q') ||
+        (key_event.code == KeyCode::Char('c') && key_event.modifiers.contains(event::KeyModifiers::CONTROL))
+}
+
 
 fn get_start_of_year(now: DateTime<Local>) -> DateTime<Local> {
     Local.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0).unwrap()
