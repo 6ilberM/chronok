@@ -2,11 +2,16 @@
 
 - what time you have left
 - progress for a single day
+
+## Features
+
 - easily configurable.
+- ???
 
 ## Usage
 
 in a terminal
+
 
 ### KeyCodes
 - Use tab to swap between views
